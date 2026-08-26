@@ -175,11 +175,8 @@ jobs:
 
   fuzz-smoke:
     name: Linux libFuzzer smoke
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
-    env:
-      CXXFLAGS: -stdlib=libc++ -fexperimental-library
-      LDFLAGS: -stdlib=libc++ -fexperimental-library
     steps:
       - uses: actions/checkout@v5
         with:
@@ -189,15 +186,16 @@ jobs:
           repository: R3zeProjects/MicroContractsFramework
           ref: ${{ env.MCF_REF }}
           path: contracts
-      - name: Install tools
-        run: >-
-          bash protocol/.github/scripts/install-apt-packages.sh
-          clang ninja-build libc++-dev libc++abi-dev
+      - name: Verify pinned toolchain
+        run: |
+          clang++-20 --version
+          cmake --version
+          ninja --version
       - name: Configure and build
         run: |
           cmake -S protocol -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_CXX_COMPILER=clang++-20 \
             -DMPROTOCOL_CONTRACTS_SOURCE_DIR="${{ github.workspace }}/contracts" \
             -DBUILD_TESTING=OFF \
             -DMPROTOCOL_BUILD_EXAMPLES=OFF \
