@@ -146,6 +146,13 @@ if(MPROTOCOL_BUILD_FUZZERS)
         -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer)
     target_link_options(MicroProtocolFrameworkFrameFuzzer PRIVATE
         -fsanitize=fuzzer,address,undefined)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+       CMAKE_CXX_FLAGS MATCHES "stdlib=libc\\+\\+")
+        # Ubuntu compiler-rt packages build libFuzzer against libstdc++ even
+        # when the harness uses libc++. The engine crosses only the documented
+        # C entry point, so satisfy its private runtime symbols explicitly.
+        target_link_libraries(MicroProtocolFrameworkFrameFuzzer PRIVATE stdc++)
+    endif()
 endif()
 
 install(TARGETS MicroProtocolFramework EXPORT mprotocolTargets)
