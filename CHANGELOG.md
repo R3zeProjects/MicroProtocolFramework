@@ -1,11 +1,15 @@
-# Changelog
+# Журнал изменений
 
 ## 0.1.0-beta
 
-- Added version ranges and deterministic highest-common-version negotiation.
-- Added bounds-checked network-order binary reader and writer.
-- Added strict UTF-8 and raw byte codecs.
-- Added the stable VSP1 frame format with opaque TLV extensions.
-- Added exact, prefix, fragmented, and coalesced stream decoding.
-- Added configurable payload, extension, frame, and buffering limits.
-- Added compile-fail, malformed-input, package, sanitizer, fuzz, and CI checks.
+- Добавлены диапазоны версий и детерминированное согласование наибольшей общей
+  версии.
+- Добавлены двоичные reader и writer с проверкой границ и сетевым порядком
+  байтов.
+- Добавлены строгий UTF-8 и кодеки сырых байтов.
+- Добавлен стабильный формат фрейма VSP1 с непрозрачными TLV-расширениями.
+- Добавлено точное, префиксное, фрагментированное и объединённое декодирование
+  потока.
+- Добавлены настраиваемые пределы payload, расширений, фрейма и буферизации.
+- Добавлены compile-fail, malformed-input, package, sanitizer, fuzz и CI
+  проверки.

@@ -1,44 +1,45 @@
-# VSP1 Wire Format
+# Формат передачи VSP1
 
-All integer fields use big-endian network byte order. Offsets are measured from
-the beginning of a frame.
+Все целочисленные поля используют сетевой порядок байтов big-endian. Смещения
+отсчитываются от начала фрейма.
 
-| Offset | Size | Field |
+| Смещение | Размер | Поле |
 |---:|---:|---|
 | 0 | 4 | Magic: ASCII `VSP1` |
-| 4 | 2 | Total header size, including TLVs |
-| 6 | 2 | Frame flags |
-| 8 | 2 | Protocol major version |
-| 10 | 2 | Protocol minor version |
-| 12 | 4 | Application message type |
-| 16 | 8 | Correlation identifier |
-| 24 | 4 | Payload size |
-| 28 | 2 | Extension count |
-| 30 | 2 | Reserved, must be zero |
-| 32 | variable | TLV extensions |
-| header size | payload size | Payload |
+| 4 | 2 | Полный размер заголовка, включая TLV |
+| 6 | 2 | Флаги фрейма |
+| 8 | 2 | Major-версия протокола |
+| 10 | 2 | Minor-версия протокола |
+| 12 | 4 | Тип прикладного сообщения |
+| 16 | 8 | Идентификатор корреляции |
+| 24 | 4 | Размер payload |
+| 28 | 2 | Количество расширений |
+| 30 | 2 | Зарезервировано, должно быть равно нулю |
+| 32 | переменный | TLV-расширения |
+| размер заголовка | размер payload | Payload |
 
-Each TLV consists of a 16-bit extension ID, a 16-bit value size, and exactly
-that many value bytes.
+Каждый TLV состоит из 16-битного ID расширения, 16-битного размера значения и
+ровно указанного количества байтов значения.
 
-Reserved extension IDs:
+Зарезервированные ID расширений:
 
-- `1`: content type;
-- `2`: compression metadata;
+- `1`: тип содержимого;
+- `2`: metadata сжатия;
 - `3`: checksum;
-- `4`: authentication metadata;
+- `4`: metadata аутентификации;
 - `5`: trace context;
-- `1024` and above: application-defined.
+- `1024` и выше: определяются приложением.
 
-MicroProtocolFramework does not interpret extension values. The framework that
-owns an extension defines its encoding, validation order, and failure policy.
+MicroProtocolFramework не интерпретирует значения расширений. Framework,
+владеющий расширением, определяет его кодирование, порядок проверки и политику
+ошибок.
 
-## Compatibility
+## Совместимость
 
-Major versions identify incompatible protocol families. Version negotiation
-selects the highest value in the intersection of two explicit `VersionRange`
-objects. Unknown flags and extension IDs remain opaque so a proxy or newer
-consumer can preserve forward-compatible metadata.
+Major-версии обозначают несовместимые семейства протокола. Согласование версий
+выбирает наибольшее значение в пересечении двух явных объектов `VersionRange`.
+Неизвестные флаги и ID расширений остаются непрозрачными, чтобы proxy или новый
+consumer мог сохранить metadata прямой совместимости.
 
-Before `1.0.0`, the VSP1 format is beta and may change through a documented
-minor release. Production users should pin an exact package version.
+До `1.0.0` формат VSP1 находится в beta и может изменяться в документированном
+minor-релизе. Production-пользователям следует фиксировать точную версию пакета.

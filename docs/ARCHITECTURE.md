@@ -1,73 +1,79 @@
-# Architecture
+# Архитектура
 
-## Scope
+## Область ответственности
 
-MicroProtocolFramework owns deterministic conversion between application
-message values and bounded byte frames. It does not own connections, retries,
-encryption keys, plugin dynamic libraries, persistence, or service lifecycle.
+MicroProtocolFramework отвечает за детерминированное преобразование прикладных
+значений сообщений в ограниченные фреймы байтов и обратно. Он не владеет
+соединениями, повторными попытками, ключами шифрования, динамическими
+библиотеками плагинов, хранилищем или жизненным циклом сервисов.
 
-## Components
+## Компоненты
 
 ```text
-application value
+прикладное значение
       |
       v
-Utf8Codec / BytesCodec / custom MCF-compatible codec
+Utf8Codec / BytesCodec / пользовательский MCF-совместимый кодек
       |
       v
-Message or MessageView
+Message или MessageView
       |
       v
-FrameCodec <---------- opaque TLV extensions
+FrameCodec <---------- непрозрачные TLV-расширения
       |
-      +---- datagram transport: one complete frame
+      +---- datagram transport: один полный фрейм
       |
-      +---- stream transport: StreamDecoder -> zero or more Messages
+      +---- stream transport: StreamDecoder -> ноль или несколько Message
 ```
 
-`BinaryReader` and `BinaryWriter` are low-level tools for application codecs.
-They use network byte order and reject truncated or excessive values.
+`BinaryReader` и `BinaryWriter` — низкоуровневые инструменты для прикладных
+кодеков. Они используют сетевой порядок байтов и отклоняют усечённые или
+чрезмерно большие значения.
 
-## Dependency rules
+## Правила зависимостей
 
-- Protocol depends on MCF contracts.
-- Transport may depend on Protocol; Protocol must not depend on Transport.
-- Security may define and verify TLV values; Protocol treats them as bytes.
-- Plugin may encode manifests and control messages; Protocol does not load
-  libraries or define a C ABI.
-- Cache may store encoded frames; Protocol does not own eviction policy.
-- Testing may fuzz every public decoder; production headers do not depend on a
-  testing framework.
+- Protocol зависит от контрактов MCF.
+- Transport может зависеть от Protocol; Protocol не должен зависеть от
+  Transport.
+- Security может определять и проверять значения TLV; Protocol рассматривает
+  их как байты.
+- Plugin может кодировать манифесты и управляющие сообщения; Protocol не
+  загружает библиотеки и не определяет C ABI.
+- Cache может хранить закодированные фреймы; Protocol не владеет политикой
+  вытеснения.
+- Testing может выполнять fuzzing каждого публичного декодера; production
+  headers не зависят от тестового framework.
 
-## Invariants
+## Инварианты
 
-- A complete frame starts with `VSP1`.
-- Integer fields are big-endian.
-- The fixed header is 32 bytes.
-- Declared sizes are validated before allocation or copying.
-- The TLV cursor must end exactly at the declared header size.
-- Exact decoding rejects trailing bytes; prefix decoding reports consumption.
-- Incremental decoding does not silently skip malformed input.
+- Полный фрейм начинается с `VSP1`.
+- Целочисленные поля имеют big-endian порядок.
+- Фиксированный заголовок занимает 32 байта.
+- Объявленные размеры проверяются до выделения памяти или копирования.
+- Курсор TLV должен завершиться точно на объявленном размере заголовка.
+- Точное декодирование отклоняет хвостовые байты; префиксное сообщает размер
+  потреблённых данных.
+- Инкрементальное декодирование не пропускает повреждённые данные молча.
 
-## Versioning
+## Версионирование
 
-One negotiation range belongs to one major protocol line. A range crossing a
-major boundary is invalid; peers select the highest common version from valid
-ranges. Frame decoding preserves the declared version, while connection policy
-decides whether that version was negotiated.
+Один диапазон согласования относится к одной major-линии протокола. Диапазон,
+пересекающий границу major-версии, некорректен; узлы выбирают наибольшую общую
+версию из корректных диапазонов. Декодирование фрейма сохраняет объявленную
+версию, а политика соединения определяет, была ли эта версия согласована.
 
-## Threading and ownership
+## Потоки и владение
 
-`Message` and `Extension` own their byte storage. `MessageView` and spans are
-non-owning and valid only for the duration of encoding. Stateless codec
-instances can be kept thread-local or copied. A `StreamDecoder` represents one
-ordered byte stream and is intentionally single-owner; a transport creates one
-decoder per connection or protects it externally.
+`Message` и `Extension` владеют своим байтовым хранилищем. `MessageView` и span
+не владеют памятью и действительны только во время кодирования. Stateless-кодеки
+можно хранить локально для потока или копировать. `StreamDecoder` представляет
+один упорядоченный поток байтов и намеренно имеет одного владельца; транспорт
+создаёт декодер на соединение или защищает его внешней синхронизацией.
 
-## Extension points
+## Точки расширения
 
-MCF provides structural `ProtocolCodec`, `ProtocolFramer`, and
-`ProtocolStreamDecoder` concepts. Applications can replace concrete
-implementations without wrapper classes. Wire extensions use TLV IDs so future
-compression, checksum, authentication, trace, and application metadata do not
-change the fixed header.
+MCF предоставляет структурные концепты `ProtocolCodec`, `ProtocolFramer` и
+`ProtocolStreamDecoder`. Приложения могут заменять конкретные реализации без
+классов-обёрток. Wire-расширения используют ID TLV, поэтому будущие metadata для
+сжатия, checksum, аутентификации, trace и приложения не изменяют фиксированный
+заголовок.

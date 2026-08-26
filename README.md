@@ -1,48 +1,48 @@
 # MicroProtocolFramework
 
-MicroProtocolFramework is a C++23 protocol core for versioned messages, bounded
-binary/text codecs, stable framing, and incremental stream decoding. It is the
-wire-format layer of the VOSP ecosystem and has no socket, reconnect,
-cryptography, compression, or plugin-loading implementation.
+MicroProtocolFramework — это ядро протокола на C++23 для версионированных
+сообщений, ограниченных двоичных и текстовых кодеков, стабильного фрейминга и
+инкрементального декодирования потоков. Это слой формата передачи экосистемы
+VOSP. Он не реализует сокеты, повторное подключение, криптографию, сжатие или
+загрузку плагинов.
 
-**Current version:** `0.1.0-beta`
+**Текущая версия:** `0.1.0-beta`
 
-## Why it exists
+## Назначение
 
-Transport code should move bytes without owning message schemas. Security code
-should authenticate bytes without owning framing. Plugins should negotiate
-versions without coupling their ABI to a network backend. This framework keeps
-those boundaries explicit:
+Транспортный код должен передавать байты, не владея схемами сообщений. Код
+безопасности должен аутентифицировать байты, не владея фреймингом. Плагины
+должны согласовывать версии без привязки ABI к сетевому бэкенду. Этот framework
+явно сохраняет такие границы:
 
 ```text
-MicroTransportFramework   sockets / IPC / reconnect / backpressure
+MicroTransportFramework   сокеты / IPC / reconnect / backpressure
              |
              v
-MicroProtocolFramework    messages / versions / codecs / VSP1 frames
+MicroProtocolFramework    сообщения / версии / кодеки / фреймы VSP1
              ^
              |
-MicroSecurityFramework    checksum / authentication / encryption extensions
-MicroPluginFramework      manifest and control-message codecs
+MicroSecurityFramework    расширения checksum / authentication / encryption
+MicroPluginFramework      кодеки манифестов и управляющих сообщений
 ```
 
-Only MicroContractsFramework is required. The concrete error model is
-replaceable through MCF concepts; a ready-to-use `std::expected` model is
-provided.
+Требуется только MicroContractsFramework. Конкретную модель ошибок можно
+заменить через концепты MCF; готовая модель использует `std::expected`.
 
-## Public API
+## Публичный API
 
-- `Version`, `VersionRange`, `negotiate_version` — version compatibility;
-- `BinaryWriter`, `BinaryReader` — checked big-endian primitives and strings;
-- `Utf8Codec`, `BytesCodec` — bounded text and byte payloads;
-- `Message`, `MessageView`, `Extension` — owning and non-owning values;
-- `FrameCodec` — exact and prefix VSP1 encoding/decoding;
-- `StreamDecoder` — fragmented and coalesced stream processing;
-- `Limits` — payload, extension, frame, and buffered-byte bounds.
+- `Version`, `VersionRange`, `negotiate_version` — совместимость версий;
+- `BinaryWriter`, `BinaryReader` — проверяемые big-endian примитивы и строки;
+- `Utf8Codec`, `BytesCodec` — ограниченные текстовые и байтовые payload;
+- `Message`, `MessageView`, `Extension` — владеющие и невладеющие значения;
+- `FrameCodec` — точное и префиксное кодирование/декодирование VSP1;
+- `StreamDecoder` — обработка фрагментированных и объединённых потоков;
+- `Limits` — пределы payload, расширений, фрейма и буферизованных байтов.
 
-The compact facade exposes `vsp::Protocol`, `vsp::ProtocolMessage`,
-`vsp::ProtocolStream`, `vsp::ProtocolVersion`, and `vsp::ProtocolLimits`.
+Компактный фасад предоставляет `vsp::Protocol`, `vsp::ProtocolMessage`,
+`vsp::ProtocolStream`, `vsp::ProtocolVersion` и `vsp::ProtocolLimits`.
 
-## Quick start
+## Быстрый старт
 
 ```cpp
 #include <vosp/protocol.hpp>
@@ -66,14 +66,15 @@ auto message = protocol.decode(*frame);
 return message && message->correlation_id() == 42 ? 0 : 3;
 ```
 
-For TCP-style fragmentation, pass every received byte range to
-`vsp::ProtocolStream::push()` and call `next()` until it returns an empty
-optional. Invalid input is fail-closed and remains buffered until `reset()`;
-the transport decides whether to close or resynchronize the connection.
+При фрагментации в стиле TCP передавайте каждый полученный диапазон байтов в
+`vsp::ProtocolStream::push()` и вызывайте `next()`, пока функция не вернёт
+пустой optional. Некорректные данные обрабатываются по принципу fail-closed и
+остаются в буфере до `reset()`; транспорт решает, закрыть соединение или
+выполнить повторную синхронизацию.
 
-## Build and test
+## Сборка и тестирование
 
-Requirements: CMake 3.25, C++23, and MicroContractsFramework 0.7.
+Требования: CMake 3.25, C++23 и MicroContractsFramework 0.7.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
@@ -82,31 +83,32 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-Installed package:
+Установленный пакет:
 
 ```cmake
 find_package(mprotocol 0.1 REQUIRED CONFIG)
 target_link_libraries(application PRIVATE vosp::protocol)
 ```
 
-Opt-in targets:
+Опциональные цели:
 
 - `-DMPROTOCOL_BUILD_BENCHMARKS=ON`;
-- `-DMPROTOCOL_BUILD_FUZZERS=ON` with Clang/libFuzzer;
+- `-DMPROTOCOL_BUILD_FUZZERS=ON` с Clang/libFuzzer;
 - `-DMPROTOCOL_ENABLE_SANITIZERS=ON`.
 
-## Measured baseline
+## Измеренный базовый уровень
 
-The bundled opt-in benchmark measures a complete owning `encode()` + `decode()`
-round trip. It therefore includes frame allocation, validation, endian
-conversion, payload copies, and decoded-message allocation.
+Встроенный опциональный benchmark измеряет полный владеющий цикл `encode()` +
+`decode()`. Поэтому результат включает выделение памяти для фрейма, валидацию,
+преобразование порядка байтов, копирование payload и выделение памяти для
+декодированного сообщения.
 
-Local Windows baseline (MSVC Release, AMD Ryzen 7 PRO 1700X, median of five
-runs):
+Локальный базовый результат Windows (MSVC Release, AMD Ryzen 7 PRO 1700X,
+медиана пяти запусков):
 
-| Payload | Round trips/s | Payload throughput |
+| Payload | Циклов/с | Пропускная способность payload |
 |---:|---:|---:|
-| 0 B | 3.81 M | control frames |
+| 0 B | 3.81 M | управляющие фреймы |
 | 64 B | 2.94 M | 0.188 GB/s |
 | 256 B | 2.84 M | 0.728 GB/s |
 | 1 KiB | 2.42 M | 2.48 GB/s |
@@ -114,27 +116,30 @@ runs):
 | 64 KiB | 164.7 K | 10.79 GB/s |
 | 1 MiB | 1.32 K | 1.38 GB/s |
 
-These values are a reproducible development baseline, not a cross-machine
-guarantee or an apples-to-oranges claim against schema compilers. Raw inputs,
-iteration counts, and medians are stored in
-[the benchmark result](benchmarks/results/windows-msvc-ryzen-1700x.csv).
-Benchmarks are source-only development targets and are not installed with the
-package.
+Эти значения — воспроизводимый базовый уровень разработки, а не гарантия для
+другого компьютера и не некорректное сравнение с компиляторами схем. Исходные
+параметры, количество итераций и медианы сохранены в
+[результате benchmark](benchmarks/results/windows-msvc-ryzen-1700x.csv).
+Benchmark является только целью для разработки из исходников и не
+устанавливается вместе с пакетом.
 
-## Safety and lifecycle
+## Безопасность и жизненный цикл
 
-- The wire layout is encoded field-by-field; C++ padding and host endian are
-  never serialized.
-- Payload, TLV, frame, and stream buffers are bounded before mutation.
-- `Message` owns its bytes; `MessageView` must not outlive referenced storage.
-- `FrameCodec`, value codecs, and immutable messages may be used concurrently
-  as separate objects.
-- `StreamDecoder`, `BinaryReader`, and `BinaryWriter` are mutable single-owner
-  objects and require external synchronization when shared.
-- Unknown flag bits and opaque extension IDs are preserved as protocol data;
-  semantic validation belongs to the owning extension framework.
+- Представление wire format кодируется по полям; padding C++ и порядок байтов
+  хоста никогда не сериализуются.
+- Размеры payload, TLV, фрейма и потокового буфера проверяются до изменения.
+- `Message` владеет байтами; `MessageView` не должен переживать хранилище, на
+  которое он ссылается.
+- `FrameCodec`, кодеки значений и неизменяемые сообщения можно параллельно
+  использовать как отдельные объекты.
+- `StreamDecoder`, `BinaryReader` и `BinaryWriter` — изменяемые объекты с одним
+  владельцем; при совместном доступе требуется внешняя синхронизация.
+- Неизвестные биты флагов и непрозрачные ID расширений сохраняются как данные
+  протокола; семантическая проверка принадлежит framework, который владеет
+  расширением.
 
-See [architecture](docs/ARCHITECTURE.md), [stable contracts](docs/CONTRACTS.md),
-and the [wire-format specification](docs/WIRE_FORMAT.md).
+См. [архитектуру](docs/ARCHITECTURE.md),
+[стабильные контракты](docs/CONTRACTS.md) и
+[спецификацию wire format](docs/WIRE_FORMAT.md).
 
-Licensed under the MIT License.
+Распространяется по лицензии MIT.

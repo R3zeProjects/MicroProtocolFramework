@@ -1,50 +1,58 @@
-# Stable contracts
+# Стабильные контракты
 
-This document defines the behavioral contracts of the `0.x` protocol core.
-Breaking these contracts requires a documented minor-version change while the
-framework remains in beta.
+Документ определяет поведенческие контракты ядра протокола `0.x`. Пока
+framework находится в beta, нарушение этих контрактов требует документированного
+изменения minor-версии.
 
-## Ownership and lifetime
+## Владение и время жизни
 
-- `Message`, `Extension`, and decoded values own their storage.
-- `MessageView`, `BinaryReader`, and returned byte spans never extend the
-  lifetime of referenced memory. The caller keeps that storage alive.
-- `FrameCodec` never stores a supplied message or input span.
-- `StreamDecoder` copies accepted input into its bounded internal buffer.
+- `Message`, `Extension` и декодированные значения владеют своим хранилищем.
+- `MessageView`, `BinaryReader` и возвращаемые span байтов не продлевают время
+  жизни памяти, на которую ссылаются. Вызывающая сторона сохраняет это
+  хранилище.
+- `FrameCodec` не сохраняет переданное сообщение или входной span.
+- `StreamDecoder` копирует принятые данные в ограниченный внутренний буфер.
 
-## Failure and mutation
+## Ошибки и изменение состояния
 
-- Expected malformed input, unsupported bounds, and incomplete data are
-  reported through the selected MCF error model.
-- Size and structure are validated before frame-level allocations.
-- A rejected `BinaryWriter` operation does not append partial protocol data.
-- A rejected `StreamDecoder::push()` does not append the new byte range.
-- Invalid buffered framing is fail-closed: `next()` reports the error and does
-  not discard bytes. The owner chooses `reset()` or connection termination.
-- Standard container allocation failures may propagate as `std::bad_alloc`.
-  The error-model contract does not attempt to recover from process-wide memory
-  exhaustion.
+- Ожидаемые повреждённые данные, неподдерживаемые пределы и неполные данные
+  возвращаются через выбранную модель ошибок MCF.
+- Размер и структура проверяются до выделений памяти уровня фрейма.
+- Отклонённая операция `BinaryWriter` не добавляет частичные данные протокола.
+- Отклонённый `StreamDecoder::push()` не добавляет новый диапазон байтов.
+- Некорректный фрейм в буфере обрабатывается по принципу fail-closed: `next()`
+  сообщает об ошибке и не удаляет байты. Владелец выбирает `reset()` или
+  завершение соединения.
+- Ошибки выделения стандартных контейнеров могут распространяться как
+  `std::bad_alloc`. Контракт модели ошибок не пытается восстанавливаться после
+  исчерпания памяти всего процесса.
 
-## Compatibility
+## Совместимость
 
-- All integral wire values use fixed widths and network byte order.
-- One `VersionRange` covers exactly one major version.
-- Negotiation selects the highest common version or returns no value.
-- Exact decode rejects trailing bytes; prefix decode reports consumed bytes.
-- Unknown flags and extension IDs are transported opaquely. The framework that
-  owns an extension defines and validates its semantics.
+- Все целочисленные wire-значения используют фиксированную ширину и сетевой
+  порядок байтов.
+- Один `VersionRange` охватывает ровно одну major-версию.
+- Согласование выбирает наибольшую общую версию или возвращает отсутствие
+  значения.
+- Точное декодирование отклоняет хвостовые байты; префиксное сообщает количество
+  потреблённых байтов.
+- Неизвестные флаги и ID расширений передаются непрозрачно. Framework-владелец
+  расширения определяет и проверяет его семантику.
 
-## Concurrency
+## Многопоточность
 
-- Independent codec instances and immutable messages may be used concurrently.
-- `FrameCodec`, `Utf8Codec`, and `BytesCodec` have const operations and no
-  mutable shared state.
-- `StreamDecoder`, `BinaryReader`, and `BinaryWriter` are single-owner mutable
-  objects. Sharing one instance requires synchronization outside this module.
+- Независимые экземпляры кодеков и неизменяемые сообщения можно использовать
+  параллельно.
+- `FrameCodec`, `Utf8Codec` и `BytesCodec` имеют const-операции и не содержат
+  общего изменяемого состояния.
+- `StreamDecoder`, `BinaryReader` и `BinaryWriter` — изменяемые объекты с одним
+  владельцем. Совместное использование одного экземпляра требует внешней
+  синхронизации.
 
-## Resource bounds
+## Ограничения ресурсов
 
-- `Limits` bounds payload bytes, extension count, extension bytes, frame size,
-  and buffered stream bytes.
-- Declared wire sizes are checked before addition, slicing, copying, or reserve.
-- Limits are local policy. They do not alter the VSP1 wire representation.
+- `Limits` ограничивает байты payload, количество расширений, байты расширений,
+  размер фрейма и буферизованные байты потока.
+- Объявленные wire-размеры проверяются до сложения, выделения диапазона,
+  копирования или reserve.
+- Пределы являются локальной политикой и не изменяют wire-представление VSP1.
