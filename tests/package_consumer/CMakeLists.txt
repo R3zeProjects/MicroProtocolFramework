@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.25)
+project(mprotocol_package_consumer LANGUAGES CXX)
+
+find_package(mprotocol 0.1 REQUIRED CONFIG)
+add_executable(mprotocol_package_consumer main.cpp)
+target_link_libraries(mprotocol_package_consumer PRIVATE vosp::protocol)
+target_compile_features(mprotocol_package_consumer PRIVATE cxx_std_23)

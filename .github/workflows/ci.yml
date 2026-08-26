@@ -1,0 +1,250 @@
+name: CI
+
+on:
+  push:
+    branches: [main, main-ru]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MCF_REF: 2a97f144868d93c604b6983af1f6e7cdf91656fb
+
+jobs:
+  build-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux GCC
+            os: ubuntu-24.04
+            compiler: g++
+            cxxflags: ''
+          - name: Linux Clang
+            os: ubuntu-24.04
+            compiler: clang++
+            cxxflags: -stdlib=libc++ -fexperimental-library
+          - name: Windows MSVC
+            os: windows-2022
+            compiler: ''
+            cxxflags: ''
+    env:
+      CXXFLAGS: ${{ matrix.cxxflags }}
+      LDFLAGS: ${{ matrix.cxxflags }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: protocol
+      - uses: actions/checkout@v5
+        with:
+          repository: R3zeProjects/MicroContractsFramework
+          ref: ${{ env.MCF_REF }}
+          path: contracts
+      - name: Install Clang standard library
+        if: matrix.name == 'Linux Clang'
+        run: >-
+          bash protocol/.github/scripts/install-apt-packages.sh
+          clang libc++-dev libc++abi-dev ninja-build
+      - name: Configure
+        shell: bash
+        run: >-
+          cmake -S protocol -B build -DCMAKE_BUILD_TYPE=Release
+          -DMPROTOCOL_CONTRACTS_SOURCE_DIR="${{ github.workspace }}/contracts"
+          -DMPROTOCOL_BUILD_EXAMPLES=ON
+          -DMPROTOCOL_BUILD_BENCHMARKS=ON
+          ${{ matrix.compiler && format('-DCMAKE_CXX_COMPILER={0}', matrix.compiler) || '' }}
+      - name: Build
+        run: cmake --build build --config Release --parallel 2
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+  sanitizers:
+    name: Linux ASan and UBSan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CXXFLAGS: -stdlib=libc++ -fexperimental-library
+      LDFLAGS: -stdlib=libc++ -fexperimental-library
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: protocol
+      - uses: actions/checkout@v5
+        with:
+          repository: R3zeProjects/MicroContractsFramework
+          ref: ${{ env.MCF_REF }}
+          path: contracts
+      - name: Install tools
+        run: >-
+          bash protocol/.github/scripts/install-apt-packages.sh
+          clang ninja-build libc++-dev libc++abi-dev
+      - name: Configure
+        run: >-
+          cmake -S protocol -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DCMAKE_CXX_COMPILER=clang++
+          -DMPROTOCOL_CONTRACTS_SOURCE_DIR="${{ github.workspace }}/contracts"
+          -DMPROTOCOL_BUILD_EXAMPLES=OFF
+          -DMPROTOCOL_ENABLE_SANITIZERS=ON
+      - name: Build and test
+        run: |
+          cmake --build build --parallel 2
+          ctest --test-dir build --output-on-failure
+
+  static-analysis:
+    name: Linux clang-tidy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CXXFLAGS: -stdlib=libc++ -fexperimental-library
+      LDFLAGS: -stdlib=libc++ -fexperimental-library
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: protocol
+      - uses: actions/checkout@v5
+        with:
+          repository: R3zeProjects/MicroContractsFramework
+          ref: ${{ env.MCF_REF }}
+          path: contracts
+      - name: Install tools
+        run: >-
+          bash protocol/.github/scripts/install-apt-packages.sh
+          clang clang-format clang-tidy ninja-build libc++-dev libc++abi-dev
+      - name: Verify formatting
+        working-directory: protocol
+        run: >-
+          find include tests examples benchmarks fuzz -type f
+          \( -name '*.hpp' -o -name '*.cpp' \) -print0 |
+          xargs -0 clang-format --dry-run --Werror
+      - name: Configure
+        run: >-
+          cmake -S protocol -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_COMPILER=clang++
+          -DCMAKE_CXX_CLANG_TIDY=clang-tidy
+          -DMPROTOCOL_CONTRACTS_SOURCE_DIR="${{ github.workspace }}/contracts"
+          -DMPROTOCOL_BUILD_EXAMPLES=ON
+      - name: Analyze
+        run: cmake --build build --parallel 2
+
+  installed-package:
+    name: Installed package consumer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: protocol
+      - uses: actions/checkout@v5
+        with:
+          repository: R3zeProjects/MicroContractsFramework
+          ref: ${{ env.MCF_REF }}
+          path: contracts
+      - name: Install tools
+        run: bash protocol/.github/scripts/install-apt-packages.sh ninja-build
+      - name: Install MCF and protocol package
+        run: |
+          cmake -S contracts -B contracts-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+          cmake --install contracts-build --prefix "$PWD/stage"
+          cmake -S protocol -B protocol-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+            -DMPROTOCOL_BUILD_EXAMPLES=OFF \
+            -DMPROTOCOL_FETCH_CONTRACTS=OFF \
+            -DCMAKE_PREFIX_PATH="$PWD/stage"
+          cmake --install protocol-build --prefix "$PWD/stage"
+          grep -F 'set(PACKAGE_VERSION "0.1.0")' \
+            stage/lib/cmake/mprotocol/mprotocolConfigVersion.cmake
+      - name: Consume installed package
+        run: |
+          cmake -S protocol/tests/package_consumer -B consumer -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$PWD/stage"
+          cmake --build consumer --parallel 2
+          ./consumer/mprotocol_package_consumer
+
+  fuzz-smoke:
+    name: Linux libFuzzer smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CXXFLAGS: -stdlib=libc++ -fexperimental-library
+      LDFLAGS: -stdlib=libc++ -fexperimental-library
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: protocol
+      - uses: actions/checkout@v5
+        with:
+          repository: R3zeProjects/MicroContractsFramework
+          ref: ${{ env.MCF_REF }}
+          path: contracts
+      - name: Install tools
+        run: >-
+          bash protocol/.github/scripts/install-apt-packages.sh
+          clang ninja-build libc++-dev libc++abi-dev
+      - name: Configure and build
+        run: >-
+          cmake -S protocol -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DCMAKE_CXX_COMPILER=clang++
+          -DMPROTOCOL_CONTRACTS_SOURCE_DIR="${{ github.workspace }}/contracts"
+          -DBUILD_TESTING=OFF
+          -DMPROTOCOL_BUILD_EXAMPLES=OFF
+          -DMPROTOCOL_BUILD_FUZZERS=ON
+      - name: Run bounded fuzz smoke
+        run: ./build/MicroProtocolFrameworkFrameFuzzer -runs=10000
+
+  benchmark-smoke:
+    name: Release benchmark smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: protocol
+      - uses: actions/checkout@v5
+        with:
+          repository: R3zeProjects/MicroContractsFramework
+          ref: ${{ env.MCF_REF }}
+          path: contracts
+      - name: Configure and build
+        run: >-
+          cmake -S protocol -B build -DCMAKE_BUILD_TYPE=Release
+          -DMPROTOCOL_CONTRACTS_SOURCE_DIR="${{ github.workspace }}/contracts"
+          -DBUILD_TESTING=OFF
+          -DMPROTOCOL_BUILD_EXAMPLES=OFF
+          -DMPROTOCOL_BUILD_BENCHMARKS=ON
+      - name: Exercise representative payloads
+        run: |
+          cmake --build build --parallel 2 \
+            --target MicroProtocolFrameworkBenchmark
+          ./build/MicroProtocolFrameworkBenchmark 1000 64
+          ./build/MicroProtocolFrameworkBenchmark 1000 1024
+          ./build/MicroProtocolFrameworkBenchmark 100 65536
+
+  translation-parity:
+    if: github.ref == 'refs/heads/main-ru'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Verify main-ru is documentation-only
+        shell: bash
+        run: |
+          git fetch origin main
+          git diff --exit-code origin/main HEAD -- . ':(exclude,glob)**/*.md'
+          git ls-tree -r --name-only origin/main | grep -E '\.md$' | sort > main-md.txt
+          git ls-tree -r --name-only HEAD | grep -E '\.md$' | sort > ru-md.txt
+          diff -u main-md.txt ru-md.txt

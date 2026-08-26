@@ -1,0 +1,17 @@
+---
+Checks: >-
+  -*,
+  clang-analyzer-*,
+  bugprone-*,
+  performance-*,
+  portability-*,
+  -clang-analyzer-optin.core.EnumCastOutOfRange,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-exception-escape,
+  -performance-enum-size,
+  -portability-avoid-pragma-once
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*/MicroProtocolFramework/(include|tests|examples|benchmarks|fuzz)/.*'
+ExcludeHeaderFilterRegex: '.*/MicroContractsFramework/.*'
+FormatStyle: file
+...
