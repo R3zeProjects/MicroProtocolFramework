@@ -177,9 +177,6 @@ jobs:
     name: Linux libFuzzer smoke
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    env:
-      CXXFLAGS: -stdlib=libc++ -fexperimental-library
-      LDFLAGS: -stdlib=libc++ -fexperimental-library
     steps:
       - uses: actions/checkout@v5
         with:
@@ -192,7 +189,7 @@ jobs:
       - name: Install tools
         run: >-
           bash protocol/.github/scripts/install-apt-packages.sh
-          clang ninja-build libc++-dev libc++abi-dev
+          clang ninja-build
       - name: Configure and build
         run: |
           cmake -S protocol -B build -G Ninja \
