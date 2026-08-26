@@ -194,14 +194,16 @@ jobs:
           bash protocol/.github/scripts/install-apt-packages.sh
           clang ninja-build libc++-dev libc++abi-dev
       - name: Configure and build
-        run: >-
-          cmake -S protocol -B build -G Ninja
-          -DCMAKE_BUILD_TYPE=RelWithDebInfo
-          -DCMAKE_CXX_COMPILER=clang++
-          -DMPROTOCOL_CONTRACTS_SOURCE_DIR="${{ github.workspace }}/contracts"
-          -DBUILD_TESTING=OFF
-          -DMPROTOCOL_BUILD_EXAMPLES=OFF
-          -DMPROTOCOL_BUILD_FUZZERS=ON
+        run: |
+          cmake -S protocol -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DMPROTOCOL_CONTRACTS_SOURCE_DIR="${{ github.workspace }}/contracts" \
+            -DBUILD_TESTING=OFF \
+            -DMPROTOCOL_BUILD_EXAMPLES=OFF \
+            -DMPROTOCOL_BUILD_FUZZERS=ON
+          cmake --build build --parallel 2 \
+            --target MicroProtocolFrameworkFrameFuzzer
       - name: Run bounded fuzz smoke
         run: ./build/MicroProtocolFrameworkFrameFuzzer -runs=10000
 
