@@ -142,16 +142,46 @@ if(MPROTOCOL_BUILD_FUZZERS)
     add_executable(MicroProtocolFrameworkFrameFuzzer fuzz/frame_fuzz.cpp)
     target_link_libraries(MicroProtocolFrameworkFrameFuzzer
         PRIVATE MicroProtocolFramework)
-    target_compile_options(MicroProtocolFrameworkFrameFuzzer PRIVATE
-        -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer)
-    target_link_options(MicroProtocolFrameworkFrameFuzzer PRIVATE
-        -fsanitize=fuzzer,address,undefined)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
        CMAKE_CXX_FLAGS MATCHES "stdlib=libc\\+\\+")
         # Ubuntu compiler-rt packages build libFuzzer against libstdc++ even
-        # when the harness uses libc++. The engine crosses only the documented
-        # C entry point, so satisfy its private runtime symbols explicitly.
-        target_link_libraries(MicroProtocolFrameworkFrameFuzzer PRIVATE stdc++)
+        # when the harness uses libc++. Disable the driver's implicit archive
+        # so that the engine is linked before its private libstdc++ dependency.
+        string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _mprotocol_arch)
+        if(_mprotocol_arch STREQUAL "amd64")
+            set(_mprotocol_arch "x86_64")
+        elseif(_mprotocol_arch STREQUAL "arm64")
+            set(_mprotocol_arch "aarch64")
+        endif()
+        execute_process(
+            COMMAND ${CMAKE_CXX_COMPILER}
+                --print-file-name=libclang_rt.fuzzer-${_mprotocol_arch}.a
+            OUTPUT_VARIABLE _mprotocol_fuzzer_runtime
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            COMMAND_ERROR_IS_FATAL ANY)
+        if(NOT IS_ABSOLUTE "${_mprotocol_fuzzer_runtime}" OR
+           NOT EXISTS "${_mprotocol_fuzzer_runtime}")
+            message(FATAL_ERROR
+                "Clang did not provide a usable libFuzzer runtime: "
+                "${_mprotocol_fuzzer_runtime}")
+        endif()
+        target_compile_options(MicroProtocolFrameworkFrameFuzzer PRIVATE
+            -fsanitize=fuzzer-no-link,address,undefined
+            -fno-omit-frame-pointer)
+        target_link_options(MicroProtocolFrameworkFrameFuzzer PRIVATE
+            -fsanitize=address,undefined)
+        target_link_libraries(MicroProtocolFrameworkFrameFuzzer PRIVATE
+            "-Wl,--whole-archive"
+            "${_mprotocol_fuzzer_runtime}"
+            "-Wl,--no-whole-archive"
+            stdc++)
+        unset(_mprotocol_arch)
+        unset(_mprotocol_fuzzer_runtime)
+    else()
+        target_compile_options(MicroProtocolFrameworkFrameFuzzer PRIVATE
+            -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer)
+        target_link_options(MicroProtocolFrameworkFrameFuzzer PRIVATE
+            -fsanitize=fuzzer,address,undefined)
     endif()
 endif()
 
