@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  MCF_REF: 2a97f144868d93c604b6983af1f6e7cdf91656fb
+  MCF_REF: 009eb4a9f340f768842be22d08b3d46aeb997ab9
 
 jobs:
   build-test:
@@ -123,7 +123,7 @@ jobs:
       - name: Verify formatting
         working-directory: protocol
         run: >-
-          find include tests examples benchmarks fuzz -type f
+          find include src tests examples benchmarks fuzz -type f
           \( -name '*.hpp' -o -name '*.cpp' \) -print0 |
           xargs -0 clang-format --dry-run --Werror
       - name: Configure
@@ -162,8 +162,9 @@ jobs:
             -DMPROTOCOL_BUILD_EXAMPLES=OFF \
             -DMPROTOCOL_FETCH_CONTRACTS=OFF \
             -DCMAKE_PREFIX_PATH="$PWD/stage"
+          cmake --build protocol-build --parallel 2
           cmake --install protocol-build --prefix "$PWD/stage"
-          grep -F 'set(PACKAGE_VERSION "0.1.0")' \
+          grep -F 'set(PACKAGE_VERSION "0.2.0")' \
             stage/lib/cmake/mprotocol/mprotocolConfigVersion.cmake
       - name: Consume installed package
         run: |
@@ -228,10 +229,12 @@ jobs:
       - name: Exercise representative payloads
         run: |
           cmake --build build --parallel 2 \
-            --target MicroProtocolFrameworkBenchmark
+            --target MicroProtocolFrameworkBenchmark MicroTransportFrameworkBenchmark
           ./build/MicroProtocolFrameworkBenchmark 1000 64
           ./build/MicroProtocolFrameworkBenchmark 1000 1024
           ./build/MicroProtocolFrameworkBenchmark 100 65536
+          ./build/MicroTransportFrameworkBenchmark 1000 64
+          ./build/MicroTransportFrameworkBenchmark 250 4096
 
   translation-parity:
     if: github.ref == 'refs/heads/main-ru'
