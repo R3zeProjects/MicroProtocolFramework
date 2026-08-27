@@ -1,0 +1,7 @@
+transport,payload_bytes,iterations_per_run,runs,median_round_trips_per_second,median_wire_bytes_per_second
+tcp,64,1000,5,13443.0,1720700
+udp,64,1000,5,20357.9,2605820
+tcp,1024,500,5,12291.8,25173600
+udp,1024,500,5,20081.3,41126500
+tcp,65507,100,5,5748.55,753140000
+udp,65507,100,5,4608.74,603810000

@@ -1,33 +1,31 @@
 # MicroProtocolFramework
 
-MicroProtocolFramework is a C++23 protocol core for versioned messages, bounded
-binary/text codecs, stable framing, and incremental stream decoding. It is the
-wire-format layer of the VOSP ecosystem and has no socket, reconnect,
-cryptography, compression, or plugin-loading implementation.
+MicroProtocolFramework is a C++23 package with two deliberately separate
+modules: a header-only protocol core and a compiled transport runtime. It
+provides versioned messages, bounded codecs, VSP1 framing, incremental stream
+decoding, RAII TCP/UDP sockets, and bounded reconnect policy.
 
-**Current version:** `0.1.0-beta`
+**Current version:** `0.2.0-beta`
 
 ## Why it exists
 
-Transport code should move bytes without owning message schemas. Security code
-should authenticate bytes without owning framing. Plugins should negotiate
-versions without coupling their ABI to a network backend. This framework keeps
-those boundaries explicit:
+Transport code should move bytes without owning message schemas. Protocol code
+should frame messages without owning sockets. The package keeps those modules
+separate even though they share one repository and release:
 
 ```text
-MicroTransportFramework   sockets / IPC / reconnect / backpressure
+vosp::transport            TCP / UDP / reconnect / blocking backpressure
              |
              v
-MicroProtocolFramework    messages / versions / codecs / VSP1 frames
+vosp::protocol             messages / versions / codecs / VSP1 frames
              ^
              |
 MicroSecurityFramework    checksum / authentication / encryption extensions
 MicroPluginFramework      manifest and control-message codecs
 ```
 
-Only MicroContractsFramework is required. The concrete error model is
-replaceable through MCF concepts; a ready-to-use `std::expected` model is
-provided.
+Only MicroContractsFramework is required. Local IPC, cryptography, compression,
+and plugin loading are intentionally outside the `0.2.0` runtime.
 
 ## Public API
 
@@ -38,9 +36,15 @@ provided.
 - `FrameCodec` — exact and prefix VSP1 encoding/decoding;
 - `StreamDecoder` — fragmented and coalesced stream processing;
 - `Limits` — payload, extension, frame, and buffered-byte bounds.
+- `TcpStream`, `TcpListener` — move-only TCP ownership, complete writes, and
+  bounded reconnect;
+- `UdpSocket`, `Datagram` — bounded message-oriented I/O;
+- `IpEndpoint`, `IoOptions`, `ReconnectPolicy` — explicit network policy.
 
 The compact facade exposes `vsp::Protocol`, `vsp::ProtocolMessage`,
 `vsp::ProtocolStream`, `vsp::ProtocolVersion`, and `vsp::ProtocolLimits`.
+Transport aliases include `vsp::TcpStream`, `vsp::TcpListener`,
+`vsp::TcpEndpoint`, and `vsp::UdpSocket`.
 
 ## Quick start
 
@@ -71,9 +75,25 @@ For TCP-style fragmentation, pass every received byte range to
 optional. Invalid input is fail-closed and remains buffered until `reset()`;
 the transport decides whether to close or resynchronize the connection.
 
+Transport is used directly, without a protocol adapter:
+
+```cpp
+#include <vosp/protocol.hpp>
+#include <vosp/transport.hpp>
+
+vsp::Protocol codec;
+vsp::TcpStream connection;
+auto connected = connection.connect(vsp::TcpEndpoint{"127.0.0.1", 9000});
+auto frame = codec.encode(vsp::ProtocolMessage{
+    vsp::ProtocolVersion{1, 0}, 7, 42, {std::byte{0x2a}}});
+if (connected && frame) {
+    auto sent = connection.send_all(*frame);
+}
+```
+
 ## Build and test
 
-Requirements: CMake 3.25, C++23, and MicroContractsFramework 0.7.
+Requirements: CMake 3.25, C++23, and MicroContractsFramework 0.8.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
@@ -85,8 +105,8 @@ ctest --test-dir build --output-on-failure
 Installed package:
 
 ```cmake
-find_package(mprotocol 0.1 REQUIRED CONFIG)
-target_link_libraries(application PRIVATE vosp::protocol)
+find_package(mprotocol 0.2 REQUIRED CONFIG)
+target_link_libraries(application PRIVATE vosp::protocol vosp::transport)
 ```
 
 Opt-in targets:
@@ -118,8 +138,22 @@ These values are a reproducible development baseline, not a cross-machine
 guarantee or an apples-to-oranges claim against schema compilers. Raw inputs,
 iteration counts, and medians are stored in
 [the benchmark result](benchmarks/results/windows-msvc-ryzen-1700x.csv).
-Benchmarks are source-only development targets and are not installed with the
-package.
+The transport benchmark measures one-client loopback request/echo round trips.
+Median of five local runs on the same Windows/MSVC/Ryzen 7 PRO 1700X host:
+
+| Transport | Payload | Round trips/s | Bidirectional wire throughput |
+|---|---:|---:|---:|
+| TCP | 64 B | 13.44 K | 1.72 MB/s |
+| UDP | 64 B | 20.36 K | 2.61 MB/s |
+| TCP | 1 KiB | 12.29 K | 25.17 MB/s |
+| UDP | 1 KiB | 20.08 K | 41.13 MB/s |
+| TCP | 65,507 B | 5.75 K | 753.14 MB/s |
+| UDP | 65,507 B | 4.61 K | 603.81 MB/s |
+
+This is a latency-sensitive loopback baseline, not internet throughput or an
+external-library comparison. Raw medians are stored in
+[`benchmarks/results/windows-msvc-ryzen-1700x-transport.csv`](benchmarks/results/windows-msvc-ryzen-1700x-transport.csv).
+Benchmarks are source-only development targets and are not installed.
 
 ## Safety and lifecycle
 
@@ -131,6 +165,12 @@ package.
   as separate objects.
 - `StreamDecoder`, `BinaryReader`, and `BinaryWriter` are mutable single-owner
   objects and require external synchronization when shared.
+- Socket classes are move-only RAII owners; `close()` is idempotent and also
+  runs during destruction.
+- Reconnect attempts are bounded by policy and by a hard limit of 1024.
+- UDP sends and receives reject payload bounds above 65,507 bytes.
+- One socket object is single-owner and requires external synchronization when
+  shared between threads.
 - Unknown flag bits and opaque extension IDs are preserved as protocol data;
   semantic validation belongs to the owning extension framework.
 

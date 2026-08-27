@@ -25,6 +25,25 @@ framework remains in beta.
   The error-model contract does not attempt to recover from process-wide memory
   exhaustion.
 
+## Transport lifecycle and failure
+
+- `TcpStream`, `TcpListener`, and `UdpSocket` are move-only RAII owners.
+- `close()` is idempotent. A moved-from object may only be destroyed, assigned,
+  queried, or closed; operations report `invalid_argument`/`not_connected`.
+- `TcpStream::send()` may write a prefix. `send_all()` writes the whole span or
+  reports a failure and closes the stream.
+- A zero-byte TCP receive is reported as `peer_closed` and closes the stream.
+- `connected()` and `listening()` describe local handle ownership; they do not
+  probe remote liveness.
+- `reconnect()` requires a previously supplied endpoint. Attempts use bounded
+  exponential delay and can never exceed 1024.
+- Zero I/O timeout means the platform blocking default. Positive timeouts are
+  applied to send/receive operations, not DNS or connect.
+- UDP payloads are capped at 65,507 bytes. The caller also supplies the receive
+  allocation bound.
+- Endpoint resolution can allocate and may perform operating-system name
+  service. The last UDP destination is cached per socket.
+
 ## Compatibility
 
 - All integral wire values use fixed widths and network byte order.
@@ -41,6 +60,8 @@ framework remains in beta.
   mutable shared state.
 - `StreamDecoder`, `BinaryReader`, and `BinaryWriter` are single-owner mutable
   objects. Sharing one instance requires synchronization outside this module.
+- Every transport object is single-owner mutable state. Separate sockets may be
+  used concurrently; sharing one object requires external synchronization.
 
 ## Resource bounds
 

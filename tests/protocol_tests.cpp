@@ -48,7 +48,7 @@ void test_contracts(Checks& checks) {
     static_assert(
         vosp::contracts::ProtocolStreamDecoder<vosp::protocol::StreamDecoder<>,
                                                vosp::protocol::Message, vosp::protocol::Model>);
-    checks.expect(vosp::protocol::version::api == "0.1.0-beta",
+    checks.expect(vosp::protocol::version::api == "0.2.0-beta",
                   "public version must match package version");
 }
 

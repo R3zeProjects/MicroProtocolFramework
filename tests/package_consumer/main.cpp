@@ -1,9 +1,14 @@
 #include <vosp/protocol.hpp>
+#include <vosp/transport.hpp>
 
 #include <cstddef>
 #include <string>
 
 int main() {
+    vosp::transport::TcpStream stream;
+    if (stream.connected()) {
+        return 4;
+    }
     vosp::protocol::Utf8Codec codec;
     auto payload = codec.encode(std::string{"installed package"});
     if (!payload) {
