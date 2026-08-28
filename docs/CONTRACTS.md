@@ -1,6 +1,6 @@
 # Stable contracts
 
-This document defines the behavioral contracts of the `0.x` protocol core.
+This document defines the behavioral contracts of the `0.x` package.
 Breaking these contracts requires a documented minor-version change while the
 framework remains in beta.
 
@@ -53,6 +53,31 @@ framework remains in beta.
 - Unknown flags and extension IDs are transported opaquely. The framework that
   owns an extension defines and validates its semantics.
 
+## Security support
+
+- `SecureBuffer::copy_from()` rejects empty input, caller limits above 64 MiB,
+  and values above the selected limit.
+- `SecureBuffer` is non-copyable. Move assignment erases the replaced secret;
+  `clear()` erases every logical byte before clearing the size, and destruction
+  erases it before releasing the allocation.
+- `SecureBuffer` does not lock pages, prevent swapping or crash-dump capture, or
+  erase source copies retained by the caller.
+- `secure_erase()` delegates to `SecureZeroMemory` or `explicit_bzero` and is
+  safe for an empty span.
+- `constant_time_equal()` has content-independent control flow for equal public
+  lengths. Length mismatch returns immediately. The C++ abstract machine does
+  not guarantee wall-clock constant time; prefer a cryptographic provider's
+  reviewed verification primitive when available.
+- `PermissionSet<Permission, Count>` requires contiguous non-negative enum
+  values in `[0, Count)` and supports at most 64 values. Invalid values do not
+  mutate the mask.
+- Authentication helpers copy an opaque provider tag into VSP1 and enforce a
+  caller limit no greater than 4096 bytes. `authentication_tag()` returns a
+  borrowed view valid only while the owning `Extension` and its value remain
+  unchanged.
+- Digest and MAC algorithms are not implemented by this package. Compatible
+  providers satisfy the MCF structural concepts without adapters.
+
 ## Concurrency
 
 - Independent codec instances and immutable messages may be used concurrently.
@@ -62,6 +87,8 @@ framework remains in beta.
   objects. Sharing one instance requires synchronization outside this module.
 - Every transport object is single-owner mutable state. Separate sockets may be
   used concurrently; sharing one object requires external synchronization.
+- Sharing one `SecureBuffer` or mutable `PermissionSet` requires external
+  synchronization. Separate instances have no shared mutable state.
 
 ## Resource bounds
 

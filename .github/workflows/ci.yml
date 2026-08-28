@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  MCF_REF: 009eb4a9f340f768842be22d08b3d46aeb997ab9
+  MCF_REF: 652b6d29447f3cc0aca0a5a356b4645fcaf324e5
 
 jobs:
   build-test:
@@ -164,7 +164,7 @@ jobs:
             -DCMAKE_PREFIX_PATH="$PWD/stage"
           cmake --build protocol-build --parallel 2
           cmake --install protocol-build --prefix "$PWD/stage"
-          grep -F 'set(PACKAGE_VERSION "0.2.0")' \
+          grep -F 'set(PACKAGE_VERSION "0.3.0")' \
             stage/lib/cmake/mprotocol/mprotocolConfigVersion.cmake
       - name: Consume installed package
         run: |
@@ -229,12 +229,15 @@ jobs:
       - name: Exercise representative payloads
         run: |
           cmake --build build --parallel 2 \
-            --target MicroProtocolFrameworkBenchmark MicroTransportFrameworkBenchmark
+            --target MicroProtocolFrameworkBenchmark MicroTransportFrameworkBenchmark \
+                     MicroSecurityFrameworkBenchmark
           ./build/MicroProtocolFrameworkBenchmark 1000 64
           ./build/MicroProtocolFrameworkBenchmark 1000 1024
           ./build/MicroProtocolFrameworkBenchmark 100 65536
           ./build/MicroTransportFrameworkBenchmark 1000 64
           ./build/MicroTransportFrameworkBenchmark 250 4096
+          ./build/MicroSecurityFrameworkBenchmark 10000 64
+          ./build/MicroSecurityFrameworkBenchmark 1000 4096
 
   translation-parity:
     if: github.ref == 'refs/heads/main-ru'

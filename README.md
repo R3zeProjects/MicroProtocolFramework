@@ -1,11 +1,13 @@
 # MicroProtocolFramework
 
-MicroProtocolFramework is a C++23 package with two deliberately separate
-modules: a header-only protocol core and a compiled transport runtime. It
+MicroProtocolFramework is a C++23 package with three deliberately separate
+modules: a header-only protocol core, a compiled transport runtime, and
+security-support primitives. It
 provides versioned messages, bounded codecs, VSP1 framing, incremental stream
-decoding, RAII TCP/UDP sockets, and bounded reconnect policy.
+decoding, RAII TCP/UDP sockets, bounded reconnect policy, secure memory
+erasure, compact permissions, and authenticated-frame composition.
 
-**Current version:** `0.2.0-beta`
+**Current version:** `0.3.0-beta`
 
 ## Why it exists
 
@@ -14,18 +16,19 @@ should frame messages without owning sockets. The package keeps those modules
 separate even though they share one repository and release:
 
 ```text
-vosp::transport            TCP / UDP / reconnect / blocking backpressure
+vosp::transport       TCP / UDP / reconnect / blocking backpressure
              |
              v
-vosp::protocol             messages / versions / codecs / VSP1 frames
+vosp::protocol        messages / versions / codecs / VSP1 frames
              ^
              |
-MicroSecurityFramework    checksum / authentication / encryption extensions
-MicroPluginFramework      manifest and control-message codecs
+vosp::security        secure bytes / permissions / authentication TLVs
 ```
 
-Only MicroContractsFramework is required. Local IPC, cryptography, compression,
-and plugin loading are intentionally outside the `0.2.0` runtime.
+Only MicroContractsFramework is required. Cryptographic algorithms are supplied
+directly by an application provider satisfying the MCF digest or authenticator
+concept; this package does not invent cryptography. Local IPC, compression, and
+plugin loading remain outside the `0.3.0` runtime.
 
 ## Public API
 
@@ -40,11 +43,17 @@ and plugin loading are intentionally outside the `0.2.0` runtime.
   bounded reconnect;
 - `UdpSocket`, `Datagram` — bounded message-oriented I/O;
 - `IpEndpoint`, `IoOptions`, `ReconnectPolicy` — explicit network policy.
+- `SecureBuffer`, `secure_erase`, `constant_time_equal` — bounded move-only
+  secret ownership and platform-backed erasure;
+- `PermissionSet` — allocation-free enum permissions in one 64-bit word;
+- `authentication_extension`, `authentication_tag` — direct composition with
+  the reserved VSP1 authentication TLV.
 
 The compact facade exposes `vsp::Protocol`, `vsp::ProtocolMessage`,
 `vsp::ProtocolStream`, `vsp::ProtocolVersion`, and `vsp::ProtocolLimits`.
 Transport aliases include `vsp::TcpStream`, `vsp::TcpListener`,
-`vsp::TcpEndpoint`, and `vsp::UdpSocket`.
+`vsp::TcpEndpoint`, and `vsp::UdpSocket`. Security exposes
+`vosp::SecureBuffer` plus the explicit `vosp::security` namespace.
 
 ## Quick start
 
@@ -91,9 +100,25 @@ if (connected && frame) {
 }
 ```
 
+Security support composes directly with protocol extensions:
+
+```cpp
+#include <vosp/security.hpp>
+
+std::array tag{std::byte{0x10}, std::byte{0x20}}; // produced by your provider
+auto extension = vosp::security::authentication_extension(tag);
+auto secret = vosp::SecureBuffer::copy_from(tag);
+if (!extension || !secret) {
+    return 1;
+}
+```
+
+The provider implements the structural `vosp::contracts::DigestProvider` or
+`MessageAuthenticator` concept. No adapter or inheritance hierarchy is needed.
+
 ## Build and test
 
-Requirements: CMake 3.25, C++23, and MicroContractsFramework 0.8.
+Requirements: CMake 3.25, C++23, and MicroContractsFramework 0.9.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
@@ -105,8 +130,9 @@ ctest --test-dir build --output-on-failure
 Installed package:
 
 ```cmake
-find_package(mprotocol 0.2 REQUIRED CONFIG)
-target_link_libraries(application PRIVATE vosp::protocol vosp::transport)
+find_package(mprotocol 0.3 REQUIRED CONFIG)
+target_link_libraries(application
+    PRIVATE vosp::protocol vosp::transport vosp::security)
 ```
 
 Opt-in targets:
@@ -153,6 +179,21 @@ Median of five local runs on the same Windows/MSVC/Ryzen 7 PRO 1700X host:
 This is a latency-sensitive loopback baseline, not internet throughput or an
 external-library comparison. Raw medians are stored in
 [`benchmarks/results/windows-msvc-ryzen-1700x-transport.csv`](benchmarks/results/windows-msvc-ryzen-1700x-transport.csv).
+
+The security-support microbenchmark measures equal-length byte comparison,
+permission updates, and platform-backed erasure. Median of five local runs on
+the same Windows/MSVC/Ryzen 7 PRO 1700X host:
+
+| Payload | Equal compare | Permission update | Secure erase |
+|---:|---:|---:|---:|
+| 64 B | 7.99 ns | 1.17 ns | 33.18 ns |
+| 4 KiB | 135.71 ns | 1.15 ns | 147.25 ns |
+
+The comparison benchmark covers equal public lengths. C++ does not provide a
+portable hard timing guarantee; `constant_time_equal` uses content-independent
+control flow and must not replace a reviewed cryptographic provider when that
+provider offers its own verification primitive. Raw runs are stored in
+[`benchmarks/results/windows-msvc-ryzen-1700x-security.csv`](benchmarks/results/windows-msvc-ryzen-1700x-security.csv).
 Benchmarks are source-only development targets and are not installed.
 
 ## Safety and lifecycle
@@ -173,6 +214,13 @@ Benchmarks are source-only development targets and are not installed.
   shared between threads.
 - Unknown flag bits and opaque extension IDs are preserved as protocol data;
   semantic validation belongs to the owning extension framework.
+- `SecureBuffer` is move-only, bounded to 64 MiB, and erases logical bytes on
+  clear, move assignment, and destruction using the operating-system primitive.
+- Secure erasure does not lock pages or erase independent source copies; use an
+  audited provider or operating-system facility for stronger threat models.
+- Permission enums must be contiguous in `[0, Count)` and `Count <= 64`.
+- Security TLV helpers validate tag identity and a configurable bound of at
+  most 4096 bytes; the returned tag span borrows the extension storage.
 
 See [architecture](docs/ARCHITECTURE.md), [stable contracts](docs/CONTRACTS.md),
 and the [wire-format specification](docs/WIRE_FORMAT.md).

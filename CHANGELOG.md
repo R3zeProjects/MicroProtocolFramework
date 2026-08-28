@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0-beta
+
+- Added the separately linkable `vosp::security` target.
+- Added bounded move-only secret storage with Windows and POSIX secure erasure.
+- Added equal-length content-independent comparison and allocation-free 64-bit
+  permission sets.
+- Added direct VSP1 authentication-extension composition for MCF-compatible
+  digest and authenticator providers.
+- Added security header, runtime, negative, package, sanitizer, static-analysis,
+  example, and benchmark coverage.
+
 ## 0.2.0-beta
 
 - Added the separately linkable `vosp::transport` target.

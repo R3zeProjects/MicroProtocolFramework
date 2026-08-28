@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(MicroProtocolFramework VERSION 0.2.0 LANGUAGES CXX)
+project(MicroProtocolFramework VERSION 0.3.0 LANGUAGES CXX)
 set(MICRO_PROTOCOL_FRAMEWORK_PRERELEASE "beta")
 
 include(CTest)
@@ -32,11 +32,11 @@ if(NOT TARGET vosp::contracts)
         set(BUILD_TESTING "${_mprotocol_saved_build_testing}")
         unset(_mprotocol_saved_build_testing)
     else()
-        find_package(vosp_contracts 0.8 QUIET CONFIG)
+        find_package(vosp_contracts 0.9 QUIET CONFIG)
         if(NOT vosp_contracts_FOUND)
             if(NOT MPROTOCOL_FETCH_CONTRACTS)
                 message(FATAL_ERROR
-                    "MicroContractsFramework 0.8 is required. Install it, set "
+                    "MicroContractsFramework 0.9 is required. Install it, set "
                     "MPROTOCOL_CONTRACTS_SOURCE_DIR, or enable "
                     "MPROTOCOL_FETCH_CONTRACTS.")
             endif()
@@ -44,7 +44,7 @@ if(NOT TARGET vosp::contracts)
             FetchContent_Declare(vosp_contracts
                 GIT_REPOSITORY
                     https://github.com/R3zeProjects/MicroContractsFramework.git
-                GIT_TAG 009eb4a9f340f768842be22d08b3d46aeb997ab9
+                GIT_TAG 652b6d29447f3cc0aca0a5a356b4645fcaf324e5
                 GIT_SHALLOW FALSE)
             set(_mprotocol_saved_build_testing "${BUILD_TESTING}")
             set(BUILD_TESTING OFF)
@@ -94,6 +94,28 @@ target_compile_options(MicroTransportFramework PRIVATE
     $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/W4;/permissive->
     $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Wall;-Wextra;-Wpedantic>)
 
+set(_mprotocol_security_sources src/security/secure_buffer.cpp)
+if(WIN32)
+    list(APPEND _mprotocol_security_sources src/security/erase_windows.cpp)
+else()
+    list(APPEND _mprotocol_security_sources src/security/erase_posix.cpp)
+endif()
+
+add_library(MicroSecurityFramework STATIC ${_mprotocol_security_sources})
+add_library(vosp::security ALIAS MicroSecurityFramework)
+set_target_properties(MicroSecurityFramework PROPERTIES
+    EXPORT_NAME security
+    POSITION_INDEPENDENT_CODE ON)
+target_compile_features(MicroSecurityFramework PUBLIC cxx_std_23)
+target_include_directories(MicroSecurityFramework PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+target_link_libraries(MicroSecurityFramework
+    PUBLIC vosp::contracts vosp::protocol)
+target_compile_options(MicroSecurityFramework PRIVATE
+    $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/W4;/permissive->
+    $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Wall;-Wextra;-Wpedantic>)
+
 function(mprotocol_enable_sanitizers target)
     if(MPROTOCOL_ENABLE_SANITIZERS)
         if(MSVC)
@@ -115,9 +137,11 @@ if(BUILD_TESTING)
         tests/header_contracts/stream_decoder_header.cpp
         tests/header_contracts/text_header.cpp
         tests/header_contracts/types_header.cpp
-        tests/header_contracts/transport_header.cpp)
+        tests/header_contracts/transport_header.cpp
+        tests/header_contracts/security_header.cpp)
     target_link_libraries(MicroProtocolFrameworkHeaderContracts
-        PRIVATE MicroProtocolFramework MicroTransportFramework)
+        PRIVATE MicroProtocolFramework MicroTransportFramework
+                MicroSecurityFramework)
 
     add_executable(MicroProtocolFrameworkTests tests/protocol_tests.cpp)
     target_link_libraries(MicroProtocolFrameworkTests
@@ -133,6 +157,14 @@ if(BUILD_TESTING)
     mprotocol_enable_sanitizers(MicroTransportFrameworkTests)
     add_test(NAME MicroTransportFramework.Tests
         COMMAND MicroTransportFrameworkTests)
+
+    add_executable(MicroSecurityFrameworkTests tests/security_tests.cpp)
+    target_link_libraries(MicroSecurityFrameworkTests
+        PRIVATE MicroSecurityFramework)
+    mprotocol_enable_sanitizers(MicroSecurityFramework)
+    mprotocol_enable_sanitizers(MicroSecurityFrameworkTests)
+    add_test(NAME MicroSecurityFramework.Tests
+        COMMAND MicroSecurityFrameworkTests)
 
     add_executable(MicroProtocolFrameworkInvalidModel EXCLUDE_FROM_ALL
         tests/compile_fail/invalid_model.cpp)
@@ -153,6 +185,16 @@ if(BUILD_TESTING)
             --config $<CONFIG> --target MicroTransportFrameworkInvalidTransport)
     set_tests_properties(MicroTransportFramework.CompileFail.InvalidTransport
         PROPERTIES WILL_FAIL TRUE)
+
+    add_executable(MicroSecurityFrameworkInvalidAuthenticator EXCLUDE_FROM_ALL
+        tests/compile_fail/invalid_authenticator.cpp)
+    target_link_libraries(MicroSecurityFrameworkInvalidAuthenticator
+        PRIVATE MicroSecurityFramework)
+    add_test(NAME MicroSecurityFramework.CompileFail.InvalidAuthenticator
+        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}
+            --config $<CONFIG> --target MicroSecurityFrameworkInvalidAuthenticator)
+    set_tests_properties(MicroSecurityFramework.CompileFail.InvalidAuthenticator
+        PROPERTIES WILL_FAIL TRUE)
 endif()
 
 if(MPROTOCOL_BUILD_EXAMPLES)
@@ -165,6 +207,9 @@ if(MPROTOCOL_BUILD_EXAMPLES)
     add_executable(MicroTransportFrameworkExample examples/transport.cpp)
     target_link_libraries(MicroTransportFrameworkExample
         PRIVATE MicroTransportFramework)
+    add_executable(MicroSecurityFrameworkExample examples/security.cpp)
+    target_link_libraries(MicroSecurityFrameworkExample
+        PRIVATE MicroSecurityFramework)
     if(BUILD_TESTING)
         add_test(NAME MicroProtocolFramework.Example.Basic
             COMMAND MicroProtocolFrameworkExample)
@@ -172,6 +217,8 @@ if(MPROTOCOL_BUILD_EXAMPLES)
             COMMAND MicroProtocolFrameworkStreamExample)
         add_test(NAME MicroTransportFramework.Example
             COMMAND MicroTransportFrameworkExample)
+        add_test(NAME MicroSecurityFramework.Example
+            COMMAND MicroSecurityFrameworkExample)
     endif()
 endif()
 
@@ -184,6 +231,10 @@ if(MPROTOCOL_BUILD_BENCHMARKS)
         benchmarks/transport_benchmark.cpp)
     target_link_libraries(MicroTransportFrameworkBenchmark
         PRIVATE MicroTransportFramework)
+    add_executable(MicroSecurityFrameworkBenchmark
+        benchmarks/security_benchmark.cpp)
+    target_link_libraries(MicroSecurityFrameworkBenchmark
+        PRIVATE MicroSecurityFramework)
 endif()
 
 if(MPROTOCOL_BUILD_FUZZERS)
@@ -204,7 +255,7 @@ if(MPROTOCOL_BUILD_FUZZERS)
         -fsanitize=fuzzer,address,undefined)
 endif()
 
-install(TARGETS MicroProtocolFramework MicroTransportFramework
+install(TARGETS MicroProtocolFramework MicroTransportFramework MicroSecurityFramework
     EXPORT mprotocolTargets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}

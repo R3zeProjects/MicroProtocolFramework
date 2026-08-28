@@ -1,7 +1,7 @@
 @PACKAGE_INIT@
 
 include(CMakeFindDependencyMacro)
-find_dependency(vosp_contracts 0.8 CONFIG)
+find_dependency(vosp_contracts 0.9 CONFIG)
 find_dependency(Threads)
 include("${CMAKE_CURRENT_LIST_DIR}/mprotocolTargets.cmake")
 check_required_components(mprotocol)
