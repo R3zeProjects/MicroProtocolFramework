@@ -3,9 +3,9 @@
 #include <string_view>
 
 namespace vosp::protocol::version {
-inline constexpr std::string_view api = "0.2.0-beta";
+inline constexpr std::string_view api = "0.3.0-beta";
 inline constexpr std::string_view prerelease = "beta";
 inline constexpr int major = 0;
-inline constexpr int minor = 2;
+inline constexpr int minor = 3;
 inline constexpr int patch = 0;
 } // namespace vosp::protocol::version

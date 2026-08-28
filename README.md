@@ -1,12 +1,13 @@
 # MicroProtocolFramework
 
-MicroProtocolFramework — пакет на C++23 с двумя намеренно разделёнными
-модулями: header-only ядром протокола и компилируемой транспортной частью. Он
-предоставляет версионированные сообщения, ограниченные кодеки, фрейминг VSP1,
-инкрементальное декодирование потоков, RAII-сокеты TCP/UDP и ограниченную
-политику повторного подключения.
+MicroProtocolFramework — пакет на C++23 с тремя намеренно разделёнными
+модулями: header-only ядром протокола, компилируемой транспортной частью и
+примитивами поддержки безопасности. Он предоставляет версионированные
+сообщения, ограниченные кодеки, фрейминг VSP1, инкрементальное декодирование
+потоков, RAII-сокеты TCP/UDP, ограниченный reconnect, безопасное стирание
+памяти, компактные разрешения и композицию аутентифицированных фреймов.
 
-**Текущая версия:** `0.2.0-beta`
+**Текущая версия:** `0.3.0-beta`
 
 ## Назначение
 
@@ -18,15 +19,16 @@ MicroProtocolFramework — пакет на C++23 с двумя намеренн�
 vosp::transport            TCP / UDP / reconnect / blocking backpressure
              |
              v
-vosp::protocol             сообщения / версии / кодеки / фреймы VSP1
+vosp::protocol        сообщения / версии / кодеки / фреймы VSP1
              ^
              |
-MicroSecurityFramework    расширения checksum / authentication / encryption
-MicroPluginFramework      кодеки манифестов и управляющих сообщений
+vosp::security        защищённые байты / разрешения / authentication TLV
 ```
 
-Требуется только MicroContractsFramework. Локальный IPC, криптография, сжатие и
-загрузка плагинов намеренно не входят в runtime версии `0.2.0`.
+Требуется только MicroContractsFramework. Криптографические алгоритмы напрямую
+предоставляет приложение через MCF-совместимый digest- или authenticator-provider;
+пакет не изобретает собственную криптографию. Локальный IPC, сжатие и загрузка
+плагинов не входят в runtime версии `0.3.0`.
 
 ## Публичный API
 
@@ -40,12 +42,18 @@ MicroPluginFramework      кодеки манифестов и управляю�
 - `TcpStream`, `TcpListener` — move-only владение TCP, полная отправка и
   ограниченное повторное подключение;
 - `UdpSocket`, `Datagram` — ограниченный ввод-вывод сообщений;
-- `IpEndpoint`, `IoOptions`, `ReconnectPolicy` — явная сетевая политика.
+- `IpEndpoint`, `IoOptions`, `ReconnectPolicy` — явная сетевая политика;
+- `SecureBuffer`, `secure_erase`, `constant_time_equal` — ограниченное
+  move-only владение секретами и платформенное стирание;
+- `PermissionSet` — разрешения enum без выделений в одном 64-битном слове;
+- `authentication_extension`, `authentication_tag` — прямая композиция с
+  зарезервированным authentication TLV VSP1.
 
 Компактный фасад предоставляет `vsp::Protocol`, `vsp::ProtocolMessage`,
 `vsp::ProtocolStream`, `vsp::ProtocolVersion` и `vsp::ProtocolLimits`.
 Транспортные псевдонимы включают `vsp::TcpStream`, `vsp::TcpListener`,
-`vsp::TcpEndpoint` и `vsp::UdpSocket`.
+`vsp::TcpEndpoint` и `vsp::UdpSocket`. Безопасность предоставляет
+`vosp::SecureBuffer` и явное пространство имён `vosp::security`.
 
 ## Быстрый старт
 
@@ -92,9 +100,25 @@ if (connected && frame) {
 }
 ```
 
+Поддержка безопасности напрямую соединяется с расширениями протокола:
+
+```cpp
+#include <vosp/security.hpp>
+
+std::array tag{std::byte{0x10}, std::byte{0x20}}; // результат provider
+auto extension = vosp::security::authentication_extension(tag);
+auto secret = vosp::SecureBuffer::copy_from(tag);
+if (!extension || !secret) {
+    return 1;
+}
+```
+
+Provider реализует структурный концепт `vosp::contracts::DigestProvider` или
+`MessageAuthenticator`. Адаптеры и иерархия наследования не требуются.
+
 ## Сборка и тестирование
 
-Требования: CMake 3.25, C++23 и MicroContractsFramework 0.8.
+Требования: CMake 3.25, C++23 и MicroContractsFramework 0.9.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
@@ -157,6 +181,19 @@ loopback. Медиана пяти локальных запусков на то�
 Это чувствительная к задержке loopback-база, а не пропускная способность
 интернета и не сравнение со сторонними библиотеками. Медианы хранятся в
 [`benchmarks/results/windows-msvc-ryzen-1700x-transport.csv`](benchmarks/results/windows-msvc-ryzen-1700x-transport.csv).
+Security benchmark измеряет сравнение диапазонов равной длины, обновление
+разрешений и платформенное стирание. Медиана пяти запусков на том же хосте:
+
+| Payload | Сравнение | Обновление разрешения | Безопасное стирание |
+|---:|---:|---:|---:|
+| 64 B | 7.99 ns | 1.17 ns | 33.18 ns |
+| 4 KiB | 135.71 ns | 1.15 ns | 147.25 ns |
+
+C++ не гарантирует абсолютное постоянное время: `constant_time_equal` имеет
+независимый от содержимого поток управления для равных публичных длин. Если
+криптографический provider предоставляет проверенный verify-примитив, следует
+использовать его. Сырые данные находятся в
+[`benchmarks/results/windows-msvc-ryzen-1700x-security.csv`](benchmarks/results/windows-msvc-ryzen-1700x-security.csv).
 Benchmarks являются исходными целями разработки и не устанавливаются с пакетом.
 
 ## Безопасность и жизненный цикл
@@ -177,6 +214,13 @@ Benchmarks являются исходными целями разработки
   совместном использовании между потоками.
 - Неизвестные флаги и непрозрачные идентификаторы расширений сохраняются как
   данные протокола; семантическая валидация принадлежит владельцу расширения.
+- `SecureBuffer` является move-only, ограничен 64 MiB и стирает логические
+  байты при clear, move-присваивании и уничтожении системным примитивом.
+- Безопасное стирание не блокирует страницы и не удаляет независимые копии;
+  для более сильной модели угроз нужен проверенный provider или средство ОС.
+- Enum разрешений должен быть непрерывным в `[0, Count)`, где `Count <= 64`.
+- Helpers authentication TLV проверяют тип и предел до 4096 байт; возвращаемый
+  span заимствует хранилище расширения.
 
 Смотрите [архитектуру](docs/ARCHITECTURE.md),
 [стабильные контракты](docs/CONTRACTS.md) и
